@@ -1,9 +1,12 @@
+%% cusimized for PTZ IID recording : detection on mean(d) instead of frequncy specific swd 
+
 loading_lfp
 corrected_baseline = baseline_correction(mean(d),2500);
 plot_swd_spectrogram_0_60(corrected_baseline,2500);
 A = plot_filtered_lfp(mean(d), 2500);
 detect_swd(corrected_baseline);
 detect_swd(A);
+detect_swd(mean(d));
 
 % Given variables
 swd_events_2500Hz = swd_events; % Original SWD events at 2500 Hz
@@ -12,11 +15,11 @@ new_sampling_rate = 30000; % New sampling rate in Hz
 scaling_factor = new_sampling_rate / original_sampling_rate;
 %%
 % Convert time points
-swd_events_30000Hz = cell(size(swd_events_2500Hz))% Replace this with your actual variable
+swd_events_30000Hz = cell(size(swd_events))% Replace this with your actual variable
 
 % Populate each component of the cell array
-for i = 1:length(swd_events_2500Hz)
-    swd_events_30000Hz{i} = swd_events_2500Hz{i} * scaling_factor; % Scale time points
+for i = 1:length(swd_events)
+    swd_events_30000Hz{i} = swd_events{i} * scaling_factor; % Scale time points
 end
 
 % Display the converted SWD events
@@ -30,11 +33,11 @@ disp(swd_events_30000Hz);
 % Define the original sampling rate
 
 % Convert time points from samples to seconds
-swd_events_seconds = cell(size(swd_events_2500Hz)); % Initialize new cell array
+swd_events_seconds = cell(size(swd_events)); % Initialize new cell array
 
 % Convert each time point in the cell array to seconds
-for i = 1:length(swd_events_2500Hz)
-    swd_events_seconds{i} = swd_events_2500Hz{i} / original_sampling_rate; % Convert to seconds
+for i = 1:length(swd_events)
+    swd_events_seconds{i} = swd_events{i} / original_sampling_rate; % Convert to seconds
 end
 
 % Display the converted SWD events in seconds
@@ -76,19 +79,19 @@ disp('Logical array populated successfully.');
 
 
 %%
-% figure()
-% hold on 
-% plot(logic_array)
-% ylim([0,2])
-% hold off
+figure()
+hold on 
+plot(logic_array)
+ylim([0,2])
+hold off
 
 
 
 %% load raster array 
 % Load WT Spike Times and Templates AND getting spiketime array 
-spike_time_wt = readNPY('F:\seizure\2024-01-02_WT_HOM-male-adult\2024-01-02_13-43-59\Record Node 101\experiment2\recording1\continuous\Neuropix-PXI-slot4-probe2-AP\spike_times.npy');
+spike_time_wt = readNPY('D:\npxl_kv11\2025-04-21_1750_594_HOM_kv11-female-adult\2025-04-21_13-18-58\Record Node 101\experiment1\recording2\continuous\Neuropix-PXI-100.ProbeA-AP\spike_times.npy');
 spike_time_full_wt = double(spike_time_wt) / 30000;
-spike_templates_wt = readNPY('F:\seizure\2024-01-02_WT_HOM-male-adult\2024-01-02_13-43-59\Record Node 101\experiment2\recording1\continuous\Neuropix-PXI-slot4-probe2-AP\spike_templates.npy');
+spike_templates_wt = readNPY('D:\npxl_kv11\2025-04-21_1750_594_HOM_kv11-female-adult\2025-04-21_13-18-58\Record Node 101\experiment1\recording2\continuous\Neuropix-PXI-100.ProbeA-AP\spike_templates.npy');
 spike_templates_full_wt = double(spike_templates_wt) + 1;
 spike_channel_wt = [spike_time_full_wt, spike_templates_full_wt];
 
@@ -112,41 +115,6 @@ end
 timepoint_array = resultArray_wt(:,2:end);
 neuron_id = resultArray_wt(:,1);
 
-%% %%%%%%%%%
-% run the section for good neurons 
-clusterTWO = load('F:\seizure\2024-01-02_WT_HOM-male-adult\2024-01-02_13-43-59\Record Node 101\experiment2\recording1\continuous\Neuropix-PXI-slot4-probe2-AP\usefulvariables\clusterTWO.mat');
-goodlables = load('F:\seizure\2024-01-02_WT_HOM-male-adult\2024-01-02_13-43-59\Record Node 101\experiment2\recording1\continuous\Neuropix-PXI-slot4-probe2-AP\usefulvariables\goodunits_brainregions.mat');
-cluster_two = clusterTWO.clusterTWO;
-goodlable = goodlables.cluster_GoodBrainRegion;
-
-% Convert cluster_two to a cell array to allow merging with goodlabel.
-cluster_two_cell = num2cell(cluster_two);
-
-% Concatenate cluster_two_cell and goodlabel column-wise.
-merged_cluster = [cluster_two_cell, goodlable];
-
-% Check the result (optional)
-disp(merged_cluster);
-
-
-% Assuming merged_cluster and resultarray_wt are already defined.
-% Get the logical indices for the conditions.
-goodStriatum_idx = cellfun(@(x) strcmp(x, 'GoodStriatum'), merged_cluster(:, 10)) & ...
-                   cell2mat(merged_cluster(:, 5)) == 1;
-goodCortex_idx = cellfun(@(x) strcmp(x, 'GoodCortex'), merged_cluster(:, 10)) & ...
-                 cell2mat(merged_cluster(:, 5)) == 1;
-
-% Use the logical indices to filter rows in resultarray_wt.
-goodStr_array = resultArray_wt(goodStriatum_idx, :);
-goodCortex_array = resultArray_wt(goodCortex_idx, :);
-
-%% swapping 
-
-timepoint_array = goodStr_array(:,2:end);
-neuron_id = goodStr_array(:,1);
-
-
-
 %%
 % Load variables (ensure logical_array and resultArray_wt are in your workspace)
 % logical_array: 1x90793140 logical array (30000 Hz)
@@ -154,7 +122,7 @@ neuron_id = goodStr_array(:,1);
 
 % Parameters
 sampling_rate = 30000; % Sampling rate in Hz
-min_burst_duration = 1; % Minimum burst duration in seconds
+min_burst_duration = 0.1; % Minimum burst duration in seconds %%%%%%%%%%%%%%%
 min_burst_samples = min_burst_duration * sampling_rate; % Minimum burst duration in samples
 bin_size = 0.1; % Bin size in seconds (0.1 s)
 bin_samples = bin_size * sampling_rate;
@@ -171,7 +139,7 @@ burst_starts = burst_starts(valid_bursts);
 burst_ends = burst_ends(valid_bursts);
 
 % Preallocate arrays for storing spike rates
-num_neurons = size(timepoint_array, 1);
+num_neurons = size(resultArray_wt, 1);
 burst_spike_rate = zeros(num_neurons, 1);
 non_burst_spike_rate = zeros(num_neurons, 1);
 
@@ -180,7 +148,7 @@ total_burst_time = sum((burst_ends - burst_starts + 1)) / sampling_rate; % Total
 total_non_burst_time = length(logic_array) / sampling_rate - total_burst_time; % Total non-burst time
 
 for neuron = 1:num_neurons
-    spike_times = timepoint_array(neuron, :);
+    spike_times = resultArray_wt(neuron, :);
     spike_times = spike_times(spike_times > 0); % Remove zero padding if any
     spike_samples = round(spike_times * sampling_rate); % Convert spike times to sample indices
 
@@ -204,11 +172,11 @@ end
 burst_to_non_burst_rate_ratio = burst_spike_rate ./ (non_burst_spike_rate + 1e-6); % Add small value to avoid division by zero
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Select neurons with higher burst spike rate
-selected_neurons = find(burst_to_non_burst_rate_ratio < 3);
+selected_neurons = find(burst_to_non_burst_rate_ratio >2);  %(<0.5 meaning off,    >2 meaing 0n )
 
 % Determine the overall x-axis range
 x_start = 0; % Starting time in seconds
-x_end = max(timepoint_array(:)); % Ending time based on the spike data
+x_end = max(resultArray_wt(:)); % Ending time based on the spike data
 % Visualization
 figure;
 
@@ -290,17 +258,17 @@ ax(2)=subplot('Position', subplot_positions(2, :));
 
 
 
-% Plot in the third subplot (SWD detection)
+% Plot in the third subplot (IID detection)
 ax(3)=subplot('Position', subplot_positions(3, :));
-time_in_seconds = (1:length(A)) / original_sampling_rate;
+time_in_seconds = (1:length(mean(d))) / original_sampling_rate;
     
-plot(time_in_seconds, A, 'Color', [0.6 0.6 0.6]); % Plot the LFP signal in a lighter color
+plot(time_in_seconds, mean(d), 'Color', [0.6 0.6 0.6]); % Plot the LFP signal in a lighter color
 hold on;
-    
+    dmean = mean(d);
     for i = 1:length(swd_events)
         event = swd_events{i};
         event_time = event / original_sampling_rate; % Convert event indices to time in seconds
-        plot(event_time, A(event), 'r', 'LineWidth', 2); % Plot SWD events in red with thicker lines
+        plot(event_time, dmean(event), 'r', 'LineWidth', 2); % Plot SWD events in red with thicker lines
     end
     
     xlabel('Time (seconds)'); % Update x-axis label
@@ -330,7 +298,7 @@ ax(5)=subplot('Position', subplot_positions(5, :));
 hold on;
 for i = 1:length(selected_neurons)
     neuron = selected_neurons(i);
-    spike_times = timepoint_array(neuron, :);
+    spike_times = resultArray_wt(neuron, :);
     spike_times = spike_times(spike_times > 0); % Remove zero padding
     scatter(spike_times, ones(size(spike_times)) * neuron, 10, '.');
 end
@@ -349,7 +317,7 @@ time_bins = x_start:bin_width:x_end;
 selected_spike_times = [];
 for i = 1:length(selected_neurons)
     neuron = selected_neurons(i);
-    spike_times = timepoint_array(neuron, :);
+    spike_times = resultArray_wt(neuron, :);
     spike_times = spike_times(spike_times > 0); % Remove zero padding
     selected_spike_times = [selected_spike_times, spike_times]; % Append spike times
 end
@@ -369,49 +337,3 @@ linkaxes(ax, 'x');
 % Adjust the figure window size as needed
 set(gcf, 'Position', [100, 100, 800, 900]);  % Example figure size
 
-
-
-%% label
-% Assuming index_goodstri, selected_neurons, and merged_cluster are already defined.
-
-% Initialize the 11th column of merged_cluster with an empty string.
-merged_cluster(:, 11) = {''};
-
-% Get the indices of the selected neurons within the original dataset.
-selected_neuron_ids = index_goodstri(selected_neurons);
-
-% Label the selected neurons as "swd-non-related-striatum-neurons".
-merged_cluster(selected_neuron_ids, 11) = {'swd-non-related-striatum-neurons'};
-
-% Find the remaining good striatum neurons.
-remaining_neuron_ids = setdiff(index_goodstri, selected_neuron_ids);
-
-% Label the remaining neurons as "swd-related-striatum-neurons".
-merged_cluster(remaining_neuron_ids, 11) = {'swd-related-striatum-neurons'};
-
-% Check the result (optional)
-disp(merged_cluster(:, [1, 10, 11])); % Display relevant columns for verification
-save('F:\seizure\2024-01-02_WT_HOM-male-adult\2024-01-02_13-43-59\Record Node 101\experiment2\recording1\continuous\Neuropix-PXI-slot4-probe2-LFP\figures_ON_off_swd\merged_cluster.mat', 'merged_cluster');
-
-%% t test fr
-% Extract rows based on the labels in the 11th column
-related_idx = strcmp(merged_cluster(:, 11), 'swd-related-striatum-neurons');
-non_related_idx = strcmp(merged_cluster(:, 11), 'swd-non-related-striatum-neurons');
-
-% Extract the 6th column for the two groups (convert to numeric)
-related_firing_rates = cell2mat(merged_cluster(related_idx, 6));
-non_related_firing_rates = cell2mat(merged_cluster(non_related_idx, 6));
-
-% Perform a two-sample t-test
-[h, p] = ttest2(related_firing_rates, non_related_firing_rates);
-
-% Display the t-test result
-disp(['t-test result: h = ', num2str(h), ', p = ', num2str(p)]);
-
-% Create a boxplot for visualization
-figure;
-boxplot([related_firing_rates; non_related_firing_rates], ...
-    [ones(size(related_firing_rates)); 2 * ones(size(non_related_firing_rates))], ...
-    'Labels', {'SWD-Related', 'SWD-Non-Related'});
-ylabel('Firing Rate');
-title('Firing Rate Comparison');
