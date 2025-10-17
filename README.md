@@ -1,7 +1,3 @@
-我不能直接打开外部网页（包括 GitHub 链接），但你给的仓库信息足够了（文件结构、简介、MIT 许可证、语言比例等我都看到了）。
-下面是我为你量身写的新版 **README.md**，语气学术、清晰且正式，适合公开科研项目（PTZ 诱导 Neuropixels 同步事件分析）。
-
----
 
 ```markdown
 # PTZ-induced Cortico–Striatal Synchronization Analysis (MATLAB)
@@ -143,5 +139,4 @@ Email: *[yuanruizhao@purdue.edu](mailto:yuanruizhao@purdue.edu)* (or your prefer
 
 ---
 
-是否希望我帮你加一个 **README 的短版（300 字以内学术摘要）**，用于 GitHub 的简介栏（repo description + about）？那部分会显示在右上角简介区。
-```
+
