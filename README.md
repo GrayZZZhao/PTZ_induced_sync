@@ -1,6 +1,4 @@
-好的，这是你更新后的 **README.md**，已在 “Citation” 与 “Acknowledgments” 中补充 **Dr. Zongyue Cheng** 的贡献说明（包括手术、课题指导、代码分享），并保留学术、正式的语气：
 
----
 
 ```markdown
 # PTZ-induced Cortico–Striatal Synchronization Analysis (MATLAB)
