@@ -1,0 +1,222 @@
+function [hFig, out] = BC_probeDepthScatter_dropin(memMapData, ephysData, qMetric, param, probeLocation, unitType, varargin)
+% BC_probeDepthScatter_dropin
+% ???“Units on probe”?????????log????????????/µm??
+% ?????GUI??????drop-in???
+%
+% Inputs (??GUI???????????)?
+%   memMapData  : AP memmap [nChan x nSamples]??????????????
+%   ephysData   : ????????
+%                 - spike_templates (nSpikes x 1, ??ID?0-based?1-based??)
+%                 - spike_times      (nSpikes x 1, ???)
+%                 - ephys_sample_rate(Hz)???????
+%                 - templates        (nTemplates x nTime x nChan)?? qMetric.maxChannels ??????????
+%                 - channel_positions(nChan x 2) [x,y]?y???(µm)
+%   qMetric     : ??????? maxChannels(nTemplates x 1)???????
+%                 ?????? templates ?????????
+%   param       : ??????
+%   probeLocation: ??????
+%   unitType    : ??“unique template”?????(0/1/2)???? ? nUniqueTemplates
+%
+% Name-Value?????
+%   'DepthThreshold'  : ???????????????????? 2625??
+%   'Title'           : ?????????? "Units on probe".
+%   'ShowLegend'      : logical?????????? true??
+%
+% Outputs:
+%   hFig : figure ??
+%   out  : ??????????
+%          .uniqueTemps (nUnique x 1)
+%          .norm_spike_n(nUnique x 1)  % ???log??????X?
+%          .unit_depths (nUnique x 1)  % ??????????Y?
+%          .unit_colors (nUnique x 3)
+%          .maxChannels (nUnique x 1)
+%          .countsPerTemplate (nUnique x 1)
+%
+% ??
+%   [hFig,out] = BC_probeDepthScatter_dropin([], ephysData, qMetric, [], [], unitType, ...
+%                                            'DepthThreshold', 2625, 'Title','WT_1347_rec2');
+
+%% ------------ Parse options ------------
+p = inputParser;
+p.addParameter('DepthThreshold', [], @(x) isempty(x) || (isscalar(x) && isnumeric(x)));
+p.addParameter('Title', 'Units on probe', @(x) ischar(x) || isstring(x));
+p.addParameter('ShowLegend', true, @(x) islogical(x) && isscalar(x));
+p.parse(varargin{:});
+depth_thr  = p.Results.DepthThreshold;
+titleStr   = string(p.Results.Title);
+showLegend = p.Results.ShowLegend;
+
+%% ------------ Sanity checks ------------
+assert(isfield(ephysData,'spike_templates') && ~isempty(ephysData.spike_templates), 'ephysData.spike_templates missing');
+assert(isfield(ephysData,'channel_positions') && size(ephysData.channel_positions,2) == 2, 'channel_positions must be nChan x 2');
+
+spike_templates = double(ephysData.spike_templates(:));
+
+% ??pipeline???ID?0-based?????1-based???
+if min(spike_templates) == 0
+    spike_templates_1b = spike_templates + 1;
+else
+    spike_templates_1b = spike_templates;
+end
+
+uniqueTemps = unique(spike_templates_1b,'stable');
+nU = numel(uniqueTemps);
+
+% unitType???????unique template
+assert(numel(unitType) >= nU, 'unitType length (%d) < number of unique templates (%d).', numel(unitType), nU);
+
+%% ------------ ????log????------------
+% ??template?spike??
+countsPerTemplate = accumarray(spike_templates_1b, 1, [max(spike_templates_1b), 1], @sum, 0);
+countsPerTemplate = countsPerTemplate(uniqueTemps);
+norm_spike_n = mat2gray(log10(countsPerTemplate + 1));  % nU x 1, 0~1
+
+%% ------------ ????unit??????max channel?------------
+if isfield(qMetric,'maxChannels') && ~isempty(qMetric.maxChannels)
+    maxChAll = qMetric.maxChannels(:);
+    % ?uniqueTemps??
+    % ???qMetric.maxChannels??????template ID?1-based???
+    assert(max(uniqueTemps) <= numel(maxChAll), 'qMetric.maxChannels length < max template id');
+    maxChannels = maxChAll(uniqueTemps);
+else
+    % ???? ephysData.templates ??
+    assert(isfield(ephysData,'templates') && ndims(ephysData.templates) == 3, ...
+        'qMetric.maxChannels missing and ephysData.templates unavailable');
+    tmpl = ephysData.templates; % nTemplates x nTime x nChan
+    nTemplates = size(tmpl,1);
+    assert(max(uniqueTemps) <= nTemplates, 'templates size < max template id');
+
+    maxChannels = nan(nU,1);
+    for k = 1:nU
+        tID = uniqueTemps(k);
+        % ????/???????
+        chAmp = squeeze(max(tmpl(tID,:,:),[],2) - min(tmpl(tID,:,:),[],2)); % 1 x nChan
+        [~, mx] = max(chAmp,[],2);
+        maxChannels(k) = mx;
+    end
+end
+
+% ???? ? ???µm?
+chanPos = ephysData.channel_positions;   % nChan x 2, [x,y]
+assert(all(maxChannels>=1) && all(maxChannels<=size(chanPos,1)), 'maxChannels out of bounds');
+unit_depths = chanPos(maxChannels, 2);
+
+%% ------------ ????unitType?------------
+% 1: ??(single) ??? 0: ?? ???2: ??? ??
+unit_colors = zeros(nU,3);
+is1 = (unitType(1:nU) == 1);
+is0 = (unitType(1:nU) == 0);
+is2 = (unitType(1:nU) == 2);
+unit_colors(is1,:) = repmat([0,   0.5, 0], sum(is1), 1);
+unit_colors(is0,:) = repmat([1,   0,   0], sum(is0), 1);
+unit_colors(is2,:) = repmat([0.29,0,0.51], sum(is2), 1);
+
+%% ------------ ?? ------------ 1 2 0
+hFig = figure('Color','w','Name','Units on probe (drop-in)','NumberTitle','off');
+ax = axes('Parent',hFig); hold(ax,'on');
+
+% ??????????????/??
+hS = gobjects(3,1);
+if any(is1)
+    hS(1) = scatter(ax, norm_spike_n(is1), unit_depths(is1), 12, unit_colors(is1,:), 'filled', 'MarkerEdgeColor','k');
+end
+if any(is2)
+    hS(2) = scatter(ax, norm_spike_n(is2), unit_depths(is2), 12, unit_colors(is2,:), 'filled', 'MarkerEdgeColor','k');
+end
+if any(is0)
+    hS(3) = scatter(ax, norm_spike_n(is0), unit_depths(is0), 12, unit_colors(is0,:), 'filled', 'MarkerEdgeColor','k');
+end
+
+% ?????????
+if ~isempty(depth_thr) && isfinite(depth_thr)
+    yline(ax, depth_thr, '--', 'LineWidth', 1.2, 'Color', [0 0 0], 'Label','depth threshold', 'LabelVerticalAlignment','bottom');
+end
+
+% ????
+xlabel(ax,'Normalized log rate');
+ylabel(ax,'Depth (\mum)');
+title(ax, titleStr);
+set(ax,'YDir','normal'); % ?????????? 'reverse' ???
+xlim(ax,[-0.05 1.05]);
+ylim(ax,[min(unit_depths)-50, max(unit_depths)+50]);
+grid(ax,'on');
+
+% ????????????
+if showLegend
+    legLabs = {};
+    legHandles = [];
+    if any(is1), legHandles(end+1) = hS(1); legLabs{end+1} = 'single (type 1)'; end %#ok<AGROW>
+    if any(is2), legHandles(end+1) = hS(2); legLabs{end+1} = 'multi (type 2)';  end %#ok<AGROW>
+    if any(is0), legHandles(end+1) = hS(3); legLabs{end+1} = 'noise (type 0)';  end %#ok<AGROW>
+    if ~isempty(legHandles)
+        legend(ax, legHandles, legLabs, 'Location','best', 'Box','off');
+    end
+end
+
+
+%% ------------ 画图 ------------
+% hFig = figure('Color','w','Name','Units on probe (drop-in)','NumberTitle','off');
+% ax = axes('Parent',hFig); hold(ax,'on');
+% 
+% % 仅保留 type1 与 type2
+% keep = (unitType(1:nU) == 1) | (unitType(1:nU) == 2);
+% 
+% % 如果你仍想用之前的 is1/is2 变量：
+% is1 = (unitType(1:nU) == 1);
+% is2 = (unitType(1:nU) == 2);
+% % is0 不再使用；无需绘制
+% % is0 = (unitType(1:nU) == 0);
+% 
+% hS = gobjects(2,1);
+% if any(is1)
+%     hS(1) = scatter(ax, norm_spike_n(is1), unit_depths(is1), 12, [0,0.5,0], 'filled', 'MarkerEdgeColor','k');
+% end
+% if any(is2)
+%     hS(2) = scatter(ax, norm_spike_n(is2), unit_depths(is2), 12, [0.29,0,0.51], 'filled', 'MarkerEdgeColor','k');
+% end
+% % 不再绘制 type0：
+% % if any(is0)
+% %     hS(3) = scatter(ax, norm_spike_n(is0), unit_depths(is0), 12, [1,0,0], 'filled', 'MarkerEdgeColor','k');
+% % end
+% 
+% % 深度阈值线（可选）
+% if ~isempty(depth_thr) && isfinite(depth_thr)
+%     yline(ax, depth_thr, '--', 'LineWidth', 1.2, 'Color', [0 0 0], 'Label','depth threshold', 'LabelVerticalAlignment','bottom');
+% end
+% 
+% % 轴与标题
+% xlabel(ax,'Normalized log rate');
+% ylabel(ax,'Depth (\mum)');
+% title(ax, titleStr);
+% set(ax,'YDir','normal');
+% 
+% % 用仅保留的点来设置范围，避免被 type0 影响
+% if any(keep)
+%     xlim(ax,[-0.05 1.05]);
+%     ymin = min(unit_depths(keep)); ymax = max(unit_depths(keep));
+%     ylim(ax,[ymin-50, ymax+50]);
+% end
+% grid(ax,'on');
+% 
+% % 图例只保留 type1、type2
+% if showLegend
+%     legLabs = {};
+%     legHandles = [];
+%     if any(is1), legHandles(end+1) = hS(1); legLabs{end+1} = 'single (type 1)'; end
+%     if any(is2), legHandles(end+1) = hS(2); legLabs{end+1} = 'multi (type 2)';  end
+%     if ~isempty(legHandles)
+%         legend(ax, legHandles, legLabs, 'Location','best', 'Box','off');
+%     end
+% end
+% 
+
+
+%% ------------ ?? ------------
+out = struct();
+out.uniqueTemps         = uniqueTemps;
+out.norm_spike_n        = norm_spike_n;
+out.unit_depths         = unit_depths;
+out.unit_colors         = unit_colors;
+out.maxChannels         = maxChannels;
+out.countsPerTemplate   = countsPerTemplate;
+end

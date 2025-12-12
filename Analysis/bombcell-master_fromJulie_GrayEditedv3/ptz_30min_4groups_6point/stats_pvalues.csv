@@ -1,0 +1,78 @@
+metric,bin,group1,group2,p_value,test
+frequency,0-10,ALL,ALL,0.00159616039330922,Kruskal-Wallis
+frequency,10-20,ALL,ALL,0.00386638191647073,Kruskal-Wallis
+frequency,20-30,ALL,ALL,0.000209408193261448,Kruskal-Wallis
+duration,0-10,ALL,ALL,0.000215453219046633,Kruskal-Wallis
+duration,10-20,ALL,ALL,0.000140235666560843,Kruskal-Wallis
+duration,20-30,ALL,ALL,0.000118830365898212,Kruskal-Wallis
+burden,0-10,ALL,ALL,0.000197735143110379,Kruskal-Wallis
+burden,10-20,ALL,ALL,0.000189729147516393,Kruskal-Wallis
+burden,20-30,ALL,ALL,7.90046165867984e-05,Kruskal-Wallis
+AUC_events,AUC,ALL,ALL,0.000197315152196881,Kruskal-Wallis
+AUC_burden,AUC,ALL,ALL,0.000140235666560843,Kruskal-Wallis
+frequency,0-10,WT,HOM,0.00216450216450216,Wilcoxon rank-sum
+duration,0-10,WT,HOM,0.00216450216450216,Wilcoxon rank-sum
+burden,0-10,WT,HOM,0.00216450216450216,Wilcoxon rank-sum
+frequency,0-10,WT,HOM+Ctrl,0.00432900432900433,Wilcoxon rank-sum
+duration,0-10,WT,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+burden,0-10,WT,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+frequency,0-10,WT,HOM+Kv1.1,0.00865800865800866,Wilcoxon rank-sum
+duration,0-10,WT,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+burden,0-10,WT,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+frequency,0-10,HOM,HOM+Ctrl,0.461038961038961,Wilcoxon rank-sum
+duration,0-10,HOM,HOM+Ctrl,0.699134199134199,Wilcoxon rank-sum
+burden,0-10,HOM,HOM+Ctrl,0.393939393939394,Wilcoxon rank-sum
+frequency,0-10,HOM,HOM+Kv1.1,0.0606060606060606,Wilcoxon rank-sum
+duration,0-10,HOM,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+burden,0-10,HOM,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+frequency,0-10,HOM+Ctrl,HOM+Kv1.1,0.0303030303030303,Wilcoxon rank-sum
+duration,0-10,HOM+Ctrl,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+burden,0-10,HOM+Ctrl,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+frequency,10-20,WT,HOM,0.504329004329004,Wilcoxon rank-sum
+duration,10-20,WT,HOM,0.00216450216450216,Wilcoxon rank-sum
+burden,10-20,WT,HOM,0.00216450216450216,Wilcoxon rank-sum
+frequency,10-20,WT,HOM+Ctrl,0.515151515151515,Wilcoxon rank-sum
+duration,10-20,WT,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+burden,10-20,WT,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+frequency,10-20,WT,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+duration,10-20,WT,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+burden,10-20,WT,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+frequency,10-20,HOM,HOM+Ctrl,0.904761904761905,Wilcoxon rank-sum
+duration,10-20,HOM,HOM+Ctrl,0.0649350649350649,Wilcoxon rank-sum
+burden,10-20,HOM,HOM+Ctrl,0.30952380952381,Wilcoxon rank-sum
+frequency,10-20,HOM,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+duration,10-20,HOM,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+burden,10-20,HOM,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+frequency,10-20,HOM+Ctrl,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+duration,10-20,HOM+Ctrl,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+burden,10-20,HOM+Ctrl,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+frequency,20-30,WT,HOM,0.00432900432900433,Wilcoxon rank-sum
+duration,20-30,WT,HOM,0.00216450216450216,Wilcoxon rank-sum
+burden,20-30,WT,HOM,0.00216450216450216,Wilcoxon rank-sum
+frequency,20-30,WT,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+duration,20-30,WT,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+burden,20-30,WT,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+frequency,20-30,WT,HOM+Kv1.1,0.0194805194805195,Wilcoxon rank-sum
+duration,20-30,WT,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+burden,20-30,WT,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+frequency,20-30,HOM,HOM+Ctrl,0.0627705627705628,Wilcoxon rank-sum
+duration,20-30,HOM,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+burden,20-30,HOM,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+frequency,20-30,HOM,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+duration,20-30,HOM,HOM+Kv1.1,0.025974025974026,Wilcoxon rank-sum
+burden,20-30,HOM,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+frequency,20-30,HOM+Ctrl,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+duration,20-30,HOM+Ctrl,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+burden,20-30,HOM+Ctrl,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+AUC_events,AUC,WT,HOM,0.00216450216450216,Wilcoxon rank-sum
+AUC_burden,AUC,WT,HOM,0.00216450216450216,Wilcoxon rank-sum
+AUC_events,AUC,WT,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+AUC_burden,AUC,WT,HOM+Ctrl,0.00216450216450216,Wilcoxon rank-sum
+AUC_events,AUC,WT,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+AUC_burden,AUC,WT,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+AUC_events,AUC,HOM,HOM+Ctrl,0.417748917748918,Wilcoxon rank-sum
+AUC_burden,AUC,HOM,HOM+Ctrl,0.0649350649350649,Wilcoxon rank-sum
+AUC_events,AUC,HOM,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+AUC_burden,AUC,HOM,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+AUC_events,AUC,HOM+Ctrl,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
+AUC_burden,AUC,HOM+Ctrl,HOM+Kv1.1,0.00216450216450216,Wilcoxon rank-sum
