@@ -1,0 +1,454 @@
+## buzz code in python
+#one-tif
+run("Concatenate...", "all_open");
+run("Enhance Contrast", "saturated=0.35");
+saveAs("Tiff");
+#baseline+ptz
+run("Concatenate...", "all_open");
+
+run("Enhance Contrast", "saturated=0.35");
+
+run("OME-TIFF...");
+#*_reg.tif
+cd /d D:\CZY\PTZ\PTZ
+python s2p_batch_nonrigid_baseline_ptz.py
+
+# s2p_batch_nonrigid_baseline_ptz.py
+# 只对 baseline / ptz 文件夹下的 baseline.tif / ptz.tif 做非刚性校正；
+# 输出每720帧一个 BigTIFF，并镜像原始文件夹结构
+
+import os, glob, shutil
+import numpy as np
+import suite2p
+from pathlib import Path
+try:
+    import tifffile
+except ImportError:
+    raise SystemExit("当前环境缺少 tifffile；请在Anaconda终端执行: pip install tifffile")
+
+# ====== 需要你确认的3个路径（按你的数据改）======
+ROOT      = r'D:\CZY\PTZ\PTZ'           # 原始数据父目录（含子目录）
+FAST_DISK = r'D:\suite2p_temp'          # 临时缓存目录（SSD更好）
+SAVE_ROOT = r'D:\suite2p_output'        # 输出根目录（将镜像 ROOT 层级）
+
+# ====== 输出每个注册后TIFF的帧数（本需求=720）======
+FRAMES_PER_TIFF = 720
+
+# ====== Suite2p 参数（简化稳定；只做运动校正）======
+ops = suite2p.default_ops()
+ops['do_registration']  = 1
+ops['nonrigid']         = True
+ops['roidetect']        = False        # 只做motion correction，速度快
+ops['nplanes']          = 1
+ops['nchannels']        = 1
+ops['functional_chan']  = 1
+ops['reg_tif']          = False        # 先不让suite2p写tif，我们自己按720帧切块
+ops['keep_movie_raw']   = False
+# ops['batch_size']     = 500  # 可按需要调整
+
+def find_target_tifs(root):
+    """
+    在 ROOT 下递归查找目标 TIF：
+    条件：
+      1) 所在文件夹名 == 'baseline' 或 'ptz'（不区分大小写）
+      2) 文件名（不含扩展名） == 'baseline' 或 'ptz'（不区分大小写）
+    最终只返回诸如：
+      ...\20240207...\baseline\baseline.tif
+      ...\20240207...\ptz\ptz.tif
+    其他 TIF 一律忽略。
+    """
+    targets = []
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        folder_name = os.path.basename(dirpath).lower()
+        if folder_name not in ('baseline', 'ptz'):
+            continue  # 只在 baseline / ptz 文件夹里找
+
+        for f in filenames:
+            if not f.lower().endswith('.tif'):
+                continue
+            stem = Path(f).stem.lower()
+            if stem in ('baseline', 'ptz'):
+                full_path = os.path.join(dirpath, f)
+                targets.append(full_path)
+
+    # 去重 + 排序
+    targets = sorted(set(targets))
+    return targets
+
+def mirror_outdir_for(tif_path: str) -> Path:
+    """在 SAVE_ROOT 下创建与 ROOT 相同的相对层级；每个输入 tif 一个独立子目录"""
+    tif_path = Path(tif_path)
+    rel = tif_path.parent.relative_to(Path(ROOT))  # 子路径层级
+    base = tif_path.stem  # 不带扩展名（baseline / ptz）
+    outdir = Path(SAVE_ROOT) / rel / f"{base}_s2p_output"
+    outdir.mkdir(parents=True, exist_ok=True)
+    return outdir
+
+def write_bigtiff_from_bin(bin_path: Path, ly: int, lx: int, nframes: int, outdir: Path, basename: str):
+    """把注册后的 binary 按 FRAMES_PER_TIFF 切成多个 BigTIFF，保持 1-based 序号"""
+    outdir.mkdir(parents=True, exist_ok=True)
+    mem = np.memmap(str(bin_path), mode='r', dtype='int16', shape=(nframes, ly, lx))
+    # Suite2p 的 binary 是 (frames, Ly, Lx)，int16；若版本不同，可根据 ops.npy 里的 dtype 调整
+
+    n_chunks = (nframes + FRAMES_PER_TIFF - 1) // FRAMES_PER_TIFF
+    for i in range(n_chunks):
+        s = i * FRAMES_PER_TIFF
+        e = min((i + 1) * FRAMES_PER_TIFF, nframes)
+        chunk = mem[s:e]                      # 形状 [frames, Ly, Lx]
+        # 输出文件名：basename_reg_001.tif, _002.tif ...
+        out_name = outdir / f"{basename}_reg_{i+1:03d}.tif"
+        with tifffile.TiffWriter(str(out_name), bigtiff=True) as tw:
+            for k in range(chunk.shape[0]):
+                tw.write(chunk[k], contiguous=True, photometric='minisblack')
+    del mem
+
+def run_one_tif(tif_path: str):
+    """对单个 baseline.tif / ptz.tif 运行 suite2p 非刚性校正，并按 720 帧切 BigTIFF"""
+    # 生成镜像输出目录
+    outdir = mirror_outdir_for(tif_path)
+    fastdir = Path(FAST_DISK)
+    fastdir.mkdir(parents=True, exist_ok=True)
+
+    # 单文件独立运行（不合并）
+    db = {
+        'data_path': [str(Path(tif_path).parent)],
+        'tiff_list': [tif_path],
+        'save_path0': str(outdir),
+        'fast_disk': str(fastdir),
+    }
+
+    print(f"\n=== Processing ===\n{tif_path}\nOutput root -> {outdir}")
+    # 运行注册（返回每个 plane 的 ops 字典列表/或单个 dict；这里只考虑 nplanes=1）
+    ops_list_or_dict = suite2p.run_s2p(ops=ops, db=db)
+    # 兼容不同返回形式
+    ops_ret = ops_list_or_dict[0] if isinstance(ops_list_or_dict, (list, tuple)) else ops_list_or_dict
+
+    # 找到注册后的 binary 路径与尺寸信息
+    reg_file = ops_ret.get('reg_file', None)
+    if reg_file is None:
+        # 有的版本把路径写在 plane0 子目录： outdir/plane0/reg_tif/data.bin 或 outdir/plane0/data.bin
+        plane0 = Path(outdir) / "plane0"
+        cand = [
+            plane0 / "data.bin",
+            plane0 / "reg_tif" / "data.bin",
+            Path(ops_ret.get('filebin', '')),
+        ]
+        reg_file = next((str(p) for p in cand if p and Path(p).exists()), None)
+
+    if not reg_file or not Path(reg_file).exists():
+        raise RuntimeError("未能找到注册后的 binary 文件，请检查 suite2p 版本与输出结构。")
+
+    ly = int(ops_ret['Ly']); lx = int(ops_ret['Lx']); nframes = int(ops_ret['nframes'])
+
+    # 把 binary 按 720 帧切 TIFF，文件名带 _reg_001/002...
+    basename = Path(tif_path).stem  # baseline / ptz
+    write_bigtiff_from_bin(Path(reg_file), ly, lx, nframes, Path(outdir), basename)
+
+    # 可选：清理中间 binary（节省空间）
+    # try:
+    #     Path(reg_file).unlink()
+    # except Exception:
+    #     pass
+
+def main():
+    tifs = find_target_tifs(ROOT)
+    print(f"Found {len(tifs)} target TIF file(s) under:\n{ROOT}")
+    if not tifs:
+        print("未找到目标文件。请检查 ROOT 路径以及 baseline/ptz 文件夹下是否有 baseline.tif / ptz.tif。")
+        return
+
+    print("\n将要处理的文件列表：")
+    for t in tifs:
+        print("  ", t)
+
+    for i, tif in enumerate(tifs, 1):
+        print(f"\n[{i}/{len(tifs)}]")
+        try:
+            run_one_tif(tif)
+            print(">>> Done.")
+        except Exception as e:
+            print(f"!!! Failed: {tif}\nReason: {e}")
+
+if __name__ == '__main__':
+    # 准备根输出与临时目录
+    Path(SAVE_ROOT).mkdir(parents=True, exist_ok=True)
+    Path(FAST_DISK).mkdir(parents=True, exist_ok=True)
+    main()
+##baseline+ptz.ome.tif 
+# s2p_batch_nonrigid_baseline_ptz.py
+# 在 ROOT 下递归查找所有 *baseline+ptz.ome.tif 文件做非刚性校正；
+# 输出每720帧一个 BigTIFF，并镜像原始文件夹结构
+
+import os, shutil
+import numpy as np
+import suite2p
+from pathlib import Path
+try:
+    import tifffile
+except ImportError:
+    raise SystemExit("当前环境缺少 tifffile；请在Anaconda终端执行: pip install tifffile")
+
+# ====== 需要你确认的3个路径（按你的数据改）======
+# 注意：这里用的是 raw string r''，可以安全包含反斜杠和空格
+ROOT      = r'D:\CZY\PTZ\PTZ\omeTif  for all'  # 原始 OME-TIFF 父目录（含子目录）
+FAST_DISK = r'D:\suite2p_temp'                 # 临时缓存目录（SSD更好）
+SAVE_ROOT = r'D:\suite2p_output'               # 输出根目录（将镜像 ROOT 层级）
+
+# ====== 输出每个注册后TIFF的帧数（本需求=720）======
+FRAMES_PER_TIFF = 720
+
+# ====== Suite2p 参数（简化稳定；只做运动校正）======
+ops = suite2p.default_ops()
+ops['do_registration']  = 1
+ops['nonrigid']         = True
+ops['roidetect']        = False        # 只做motion correction，速度快
+ops['nplanes']          = 1
+ops['nchannels']        = 1
+ops['functional_chan']  = 1
+ops['reg_tif']          = False        # 先不让suite2p写tif，我们自己按720帧切块
+ops['keep_movie_raw']   = False
+# ops['batch_size']     = 500  # 可按需要调整
+
+def find_target_tifs(root):
+    r"""
+    在 ROOT 下递归查找目标 OME-TIFF：
+    条件：
+      1) 文件名以 'baseline+ptz.ome.tif' 结尾（不区分大小写）
+
+    示例（仅说明路径结构，不参与解析）：
+      some_folder\mouse1 baseline+ptz.ome.tif
+
+    其他 TIF 一律忽略。
+    """
+    targets = []
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        for f in filenames:
+            f_lower = f.lower()
+            # 只要是 *baseline+ptz.ome.tif 都匹配
+            if f_lower.endswith('baseline+ptz.ome.tif'):
+                full_path = os.path.join(dirpath, f)
+                targets.append(full_path)
+
+    # 去重 + 排序
+    targets = sorted(set(targets))
+    return targets
+
+def mirror_outdir_for(tif_path: str) -> Path:
+    """
+    在 SAVE_ROOT 下创建与 ROOT 相同的相对层级；
+    每个输入 tif 一个独立子目录，如：
+
+      ROOT\...\subfolder\mouse1 baseline+ptz.ome.tif
+    -> SAVE_ROOT\...\subfolder\mouse1 baseline+ptz_s2p_output\
+    """
+    tif_path = Path(tif_path)
+    rel = tif_path.parent.relative_to(Path(ROOT))  # 子路径层级
+    base = tif_path.stem  # 不带扩展名，例如 'mouse1 baseline+ptz'
+    outdir = Path(SAVE_ROOT) / rel / f"{base}_s2p_output"
+    outdir.mkdir(parents=True, exist_ok=True)
+    return outdir
+
+def write_bigtiff_from_bin(bin_path: Path, ly: int, lx: int, nframes: int,
+                           outdir: Path, basename: str):
+    """把注册后的 binary 按 FRAMES_PER_TIFF 切成多个 BigTIFF，保持 1-based 序号"""
+    outdir.mkdir(parents=True, exist_ok=True)
+    mem = np.memmap(str(bin_path), mode='r', dtype='int16', shape=(nframes, ly, lx))
+    # Suite2p 的 binary 是 (frames, Ly, Lx)，int16；若版本不同，可根据 ops.npy 里的 dtype 调整
+
+    n_chunks = (nframes + FRAMES_PER_TIFF - 1) // FRAMES_PER_TIFF
+    for i in range(n_chunks):
+        s = i * FRAMES_PER_TIFF
+        e = min((i + 1) * FRAMES_PER_TIFF, nframes)
+        chunk = mem[s:e]                      # 形状 [frames, Ly, Lx]
+        # 输出文件名：basename_reg_001.tif, _002.tif ...
+        out_name = outdir / f"{basename}_reg_{i+1:03d}.tif"
+        with tifffile.TiffWriter(str(out_name), bigtiff=True) as tw:
+            for k in range(chunk.shape[0]):
+                tw.write(chunk[k], contiguous=True, photometric='minisblack')
+    del mem
+
+def run_one_tif(tif_path: str):
+    """对单个 *baseline+ptz.ome.tif 运行 suite2p 非刚性校正，并按 720 帧切 BigTIFF"""
+    # 生成镜像输出目录
+    outdir = mirror_outdir_for(tif_path)
+    fastdir = Path(FAST_DISK)
+    fastdir.mkdir(parents=True, exist_ok=True)
+
+    # 单文件独立运行（不合并）
+    db = {
+        'data_path': [str(Path(tif_path).parent)],
+        'tiff_list': [tif_path],
+        'save_path0': str(outdir),
+        'fast_disk': str(fastdir),
+    }
+
+    print(f"\n=== Processing ===\n{tif_path}\nOutput root -> {outdir}")
+    # 运行注册（返回每个 plane 的 ops 字典列表/或单个 dict；这里只考虑 nplanes=1）
+    ops_list_or_dict = suite2p.run_s2p(ops=ops, db=db)
+    # 兼容不同返回形式
+    ops_ret = ops_list_or_dict[0] if isinstance(ops_list_or_dict, (list, tuple)) else ops_list_or_dict
+
+    # 找到注册后的 binary 路径与尺寸信息
+    reg_file = ops_ret.get('reg_file', None)
+    if reg_file is None:
+        # 有的版本把路径写在 plane0 子目录： outdir/plane0/reg_tif/data.bin 或 outdir/plane0/data.bin
+        plane0 = Path(outdir) / "plane0"
+        cand = [
+            plane0 / "data.bin",
+            plane0 / "reg_tif" / "data.bin",
+            Path(ops_ret.get('filebin', '')),
+        ]
+        reg_file = next((str(p) for p in cand if p and Path(p).exists()), None)
+
+    if not reg_file or not Path(reg_file).exists():
+        raise RuntimeError("未能找到注册后的 binary 文件，请检查 suite2p 版本与输出结构。")
+
+    ly = int(ops_ret['Ly'])
+    lx = int(ops_ret['Lx'])
+    nframes = int(ops_ret['nframes'])
+
+    # 把 binary 按 720 帧切 TIFF，文件名带 _reg_001/002...
+    basename = Path(tif_path).stem  # 例如 'mouse1 baseline+ptz'
+    write_bigtiff_from_bin(Path(reg_file), ly, lx, nframes, Path(outdir), basename)
+
+    # 可选：清理中间 binary（节省空间）
+    # try:
+    #     Path(reg_file).unlink()
+    # except Exception:
+    #     pass
+
+def main():
+    tifs = find_target_tifs(ROOT)
+    print(f"Found {len(tifs)} target OME-TIFF file(s) under:\n{ROOT}")
+    if not tifs:
+        print("未找到目标文件。请检查 ROOT 路径以及是否有 *baseline+ptz.ome.tif 文件。")
+        return
+
+    print("\n将要处理的文件列表：")
+    for t in tifs:
+        print("  ", t)
+
+    for i, tif in enumerate(tifs, 1):
+        print(f"\n[{i}/{len(tifs)}]")
+        try:
+            run_one_tif(tif)
+            print(">>> Done.")
+        except Exception as e:
+            print(f"!!! Failed: {tif}\nReason: {e}")
+
+if __name__ == '__main__':
+    # 准备根输出与临时目录
+    Path(SAVE_ROOT).mkdir(parents=True, exist_ok=True)
+    Path(FAST_DISK).mkdir(parents=True, exist_ok=True)
+    main()
+
+##AVG / STD, and resize to 512 x 512
+%% 
+% Specify the top-level folder path
+topFolderPath = 'D:\suite2p_output\analysis';
+
+% Initialize a counter to keep track of processed files
+global fileCounter;
+fileCounter = 0;
+
+% Call the main function to process the folder and its subfolders
+processTifFilesInFolder(topFolderPath);
+
+% Function definitions should be placed at the end of the script
+function processTifFilesInFolder(folderPath)
+    % Get all .tif files in the current folder
+    tifFiles = dir(fullfile(folderPath, '*.tif'));
+    
+    % 仅当找到 .tif 文件时才创建 AVG 和 STD 文件夹
+    if ~isempty(tifFiles)
+        % Create "AVG" and "STD" folders if they don't exist
+        avgFolder = fullfile(folderPath, 'AVG');
+        stdFolder = fullfile(folderPath, 'STD');
+        if ~exist(avgFolder, 'dir')
+            mkdir(avgFolder);
+        end
+        if ~exist(stdFolder, 'dir')
+            mkdir(stdFolder);
+        end
+
+        % Loop through each .tif file
+        for k = 1:length(tifFiles)
+            % Update the global file counter
+            global fileCounter;
+            fileCounter = fileCounter + 1;
+
+            % Get the base name of the current file (without extension)
+            [~, name, ~] = fileparts(tifFiles(k).name); % Get the file name without extension
+
+            % Check if the average and std files already exist
+            avgOutputFileName = fullfile(avgFolder, [name '_average.tif']);
+            stdOutputFileName = fullfile(stdFolder, [name '_std.tif']);
+            
+            % If both files already exist, skip the file
+            if exist(avgOutputFileName, 'file') && exist(stdOutputFileName, 'file')
+                disp(['Skipping file ' tifFiles(k).name ' as it has already been processed.']);
+                continue; % Skip to the next file
+            end
+
+            % Display progress
+            disp(['Processing file ' num2str(fileCounter) ': ' tifFiles(k).name ' in folder: ' folderPath]);
+
+            % Get the full path of the current file
+            filePath = fullfile(folderPath, tifFiles(k).name);
+
+            try
+                % Read the image information of the .tif file
+                info = imfinfo(filePath);
+                numImages = numel(info);
+
+                % Initialize variables to store image data
+                sumImage = 0;
+                sumSquareImage = 0;
+
+                % Read and accumulate all image frames
+                for i = 1:numImages
+                    currentImage = double(imread(filePath, i));
+                    sumImage = sumImage + currentImage;
+                    sumSquareImage = sumSquareImage + currentImage.^2;
+                end
+
+                % Calculate the average image
+                avgImage = sumImage / numImages;
+
+                % Calculate the standard deviation image
+                stdImage = sqrt(sumSquareImage / numImages - avgImage.^2);
+
+                % Convert the average and standard deviation images to uint16 format and save them
+                avgImage = uint16(avgImage);
+                stdImage = uint16(stdImage);
+
+                % Save the avgImage in the "AVG" folder
+                imwrite(avgImage, avgOutputFileName);
+
+                % Save the stdImage in the "STD" folder
+                imwrite(stdImage, stdOutputFileName);
+
+            catch ME
+                % Display a warning and skip the current file if an error occurs
+                disp(['Warning: Could not process file ' tifFiles(k).name ' due to the following error: ' ME.message]);
+                continue; % Skip to the next file
+            end
+        end
+    end
+    
+    % Get all subfolders in the current folder
+    subFolders = dir(folderPath);
+    for k = 1:length(subFolders)
+        % Skip the '.' and '..' folders and also skip "AVG" and "STD" folders
+        if subFolders(k).isdir && ~strcmp(subFolders(k).name, '.') && ~strcmp(subFolders(k).name, '..') && ...
+           ~strcmp(subFolders(k).name, 'AVG') && ~strcmp(subFolders(k).name, 'STD')
+            % Recursively call the function for each subfolder
+            disp(['Entering folder: ' subFolders(k).name]); % Display which subfolder is being processed
+            processTifFilesInFolder(fullfile(folderPath, subFolders(k).name));
+        end
+    end
+end
+
+
